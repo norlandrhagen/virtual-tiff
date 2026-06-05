@@ -25,7 +25,6 @@ from virtual_tiff.constants import COMPRESSORS, GEO_KEYS, SAMPLE_DTYPES
 from virtual_tiff.imagecodecs import FloatPredCodec, ZstdCodec
 from virtual_tiff.utils import (
     check_no_partial_strips,
-    gdal_metadata_to_dict,
 )
 from virtual_tiff.vendor.xarray.zarr import FillValueCoder
 
@@ -305,15 +304,23 @@ def _get_attributes(
         try:
             attrs["crs_wkt"] = geotiff.crs.to_wkt()
             attrs["transform"] = list(geotiff.transform)
-        except Exception:
-            # Fall back to raw GeoKey attrs and warn the user.
+        except (ValueError, RuntimeError) as e:
             warnings.warn(
-                "async-geotiff could not parse the CRS or transform, falling back to raw GeoKey attrs.",
+                f"async-geotiff could not parse the CRS or transform ({e}); "
+                "falling back to raw GeoKey attrs.",
                 UserWarning,
-                stacklevel=2,  # is this the right lvl?
+                stacklevel=2,
             )
             if ifd.geo_key_directory:
                 attrs = _parse_geo_key_directory(ifd.geo_key_directory)
+        if geotiff._gdal_metadata is not None:
+            attrs["offsets"] = list(geotiff.offsets)
+            attrs["scales"] = list(geotiff.scales)
+            if stats := geotiff.stored_stats:
+                attrs["band_statistics"] = {
+                    k: {f: v for f, v in vars(stat).items() if v is not None}
+                    for k, stat in stats.items()
+                }
     elif ifd.geo_key_directory:
         attrs = _parse_geo_key_directory(ifd.geo_key_directory)
     extra_keys = [
@@ -325,8 +332,6 @@ def _get_attributes(
     for key in extra_keys:
         if value := getattr(ifd, key):
             attrs[key] = value
-    if gdal_metadata := ifd.gdal_metadata:
-        attrs = {**attrs, **gdal_metadata_to_dict(gdal_metadata)}
     if fill_value := ifd.gdal_nodata:
         attrs["gdal_no_data"] = fill_value
     return attrs
@@ -378,9 +383,9 @@ async def _open_tiff(*, path: str, store: ObjectStore) -> AsyncGeoTIFF | TIFF:
         if HAS_ASYNC_GEOTIFF:
             try:
                 return AsyncGeoTIFF(tiff)
-            except Exception:
+            except ValueError as e:
                 warnings.warn(
-                    "async-geotiff could not parse this GeoTIFF; falling back to async-tiff "
+                    f"async-geotiff could not parse this GeoTIFF ({e}); falling back to async-tiff "
                     "parsing. Geospatial attributes may be incomplete.",
                     UserWarning,
                     stacklevel=2,
@@ -486,10 +491,8 @@ def _construct_manifest_group(
     """
     # TODO: Make an async approach
     tiff = sync(_open_tiff(store=store, path=path))
-    if HAS_ASYNC_GEOTIFF and isinstance(tiff, AsyncGeoTIFF):
-        endian = _ENDIANNESS_TO_STR[tiff.tiff.endianness]
-    else:
-        endian = _ENDIANNESS_TO_STR[tiff.endianness]
+    raw_tiff = tiff.tiff if isinstance(tiff, AsyncGeoTIFF) else tiff
+    endian = _ENDIANNESS_TO_STR[raw_tiff.endianness]
 
     # Build manifest arrays from selected IFDs
     manifest_arrays = _build_manifest_arrays(tiff, url, endian, ifd)
