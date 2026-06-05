@@ -25,7 +25,6 @@ from virtual_tiff.constants import COMPRESSORS, GEO_KEYS, SAMPLE_DTYPES
 from virtual_tiff.imagecodecs import FloatPredCodec, ZstdCodec
 from virtual_tiff.utils import (
     check_no_partial_strips,
-    convert_obstore_to_async_tiff_store,
     gdal_metadata_to_dict,
 )
 from virtual_tiff.vendor.xarray.zarr import FillValueCoder
@@ -374,8 +373,7 @@ def _construct_chunk_manifest(
 
 
 async def _open_tiff(*, path: str, store: ObjectStore) -> AsyncGeoTIFF | TIFF:
-    async_tiff_store = convert_obstore_to_async_tiff_store(store)
-    tiff = await TIFF.open(path, store=async_tiff_store)
+    tiff = await TIFF.open(path, store=store)
     if tiff.ifds[0].geo_key_directory is not None:
         if HAS_ASYNC_GEOTIFF:
             try:

@@ -74,6 +74,16 @@ geotiff_test_data_failures = {
     "rasterio_generated/fixtures/uint8_rgba_webp_block64_cog.tif": "ValueError: cannot reshape array of size 12288 into shape (4,64,64)",
     "real_data/hot-oam/68077a72c46a9912474701ef.tif": "NotImplementedError: YCbCr PhotometricInterpretation is not yet supported.",
     "real_data/vantor/maxar_opendata_yellowstone_visual.tif": "NotImplementedError: YCbCr PhotometricInterpretation is not yet supported.",
+    "real_data/rio-tiler/cog_rgb_with_stats.tif": "NotImplementedError: YCbCr PhotometricInterpretation is not yet supported.",
+    "real_data/rio-tiler/non-tiled.tif": "ValueError: Zarr's default chunk grid expects all chunks to be equal size, but this TIFF has an uneven last strip.",
+}
+
+# Failures only when mask_and_scale=True; raw data passes. Tracked in
+# https://github.com/virtual-zarr/virtual-tiff/issues/90.
+geotiff_test_data_mask_and_scale_failures = {
+    "rasterio_generated/fixtures/cog_uint8_rgba.tif": "Alpha band masking not yet supported (issue #90, Category 1).",
+    "rasterio_generated/fixtures/cog_uint8_rgb_mask.tif": "Internal mask IFDs not yet supported (issue #90, Category 2).",
+    "rasterio_generated/fixtures/uint8_1band_deflate_block128_unaligned_mask.tif": "Internal mask IFDs not yet supported (issue #90, Category 2).",
 }
 
 
@@ -82,6 +92,8 @@ geotiff_test_data_failures = {
 def test_geotiff_test_data_load(rel_path, mask_and_scale):
     if rel_path in geotiff_test_data_failures:
         pytest.xfail(geotiff_test_data_failures[rel_path])
+    if mask_and_scale and rel_path in geotiff_test_data_mask_and_scale_failures:
+        pytest.xfail(geotiff_test_data_mask_and_scale_failures[rel_path])
     filepath = f"{resolve_folder('tests/data/geotiff-test-data')}/{rel_path}"
     registry = ObjectStoreRegistry({"file://": LocalStore()})
     ds = loadable_dataset(
@@ -91,6 +103,28 @@ def test_geotiff_test_data_load(rel_path, mask_and_scale):
     da = ds["0"]
     da_expected = rioxarray.open_rasterio(filepath, masked=mask_and_scale)
     np.testing.assert_allclose(da.data, da_expected.data.squeeze())
+
+
+def test_geo_key_attributes_are_not_booleans():
+    """Regression test: geo key values must be their actual values, not booleans.
+
+    A walrus operator precedence bug previously caused _parse_geo_key_directory
+    to store True instead of the real attribute value (e.g. EPSG code 4326).
+    """
+    filepath = resolve_folder(
+        "tests/data/geotiff-test-data/rasterio_generated/fixtures/antimeridian.tif"
+    )
+    parser = VirtualTIFF(ifd=0)
+    registry = ObjectStoreRegistry({"file://": LocalStore()})
+    ms = parser(f"file://{filepath}", registry=registry)
+    ds = xr.open_dataset(ms, engine="zarr", consolidated=False, zarr_format=3)
+    attrs = ds["0"].attrs
+    # geographic_type should be the EPSG code, not True
+    assert attrs["geographic_type"] == 4326
+    assert attrs["model_type"] == 2
+    # model_pixel_scale should be a list of floats, not True
+    assert isinstance(attrs["model_pixel_scale"], list)
+    assert attrs["model_pixel_scale"] == [1.0, 1.0, 0.0]
 
 
 def test_local_store_with_prefix():
