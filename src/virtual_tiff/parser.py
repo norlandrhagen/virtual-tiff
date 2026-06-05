@@ -488,11 +488,10 @@ def _construct_manifest_group(
     """
     # TODO: Make an async approach
     tiff = sync(_open_tiff(store=store, path=path))
-    # endianness. _tiff is a private attribute; revisit if a public API is added later.
-    underlying_tiff = (
-        tiff._tiff if (HAS_ASYNC_GEOTIFF and isinstance(tiff, AsyncGeoTIFF)) else tiff
-    )
-    endian = _ENDIANNESS_TO_STR[underlying_tiff.endianness]
+    if HAS_ASYNC_GEOTIFF and isinstance(tiff, AsyncGeoTIFF):
+        endian = _ENDIANNESS_TO_STR[tiff.tiff.endianness]
+    else:
+        endian = _ENDIANNESS_TO_STR[tiff.endianness]
 
     # Build manifest arrays from selected IFDs
     manifest_arrays = _build_manifest_arrays(tiff, url, endian, ifd)
@@ -530,9 +529,7 @@ def _build_manifest_arrays(
 
     if HAS_ASYNC_GEOTIFF and isinstance(tiff, AsyncGeoTIFF):
         geotiff = tiff
-        # async-geotiff exposes no public API to iterate image IFDs directly.
-        # _primary_ifd and Overview._ifd are private; revisit if a public API is added upstream.
-        ifds = [geotiff._primary_ifd, *[ovr._ifd for ovr in geotiff.overviews]]
+        ifds = [geotiff.ifd, *[ovr.ifd for ovr in geotiff.overviews]]
     else:
         geotiff = None
         ifds = tiff.ifds

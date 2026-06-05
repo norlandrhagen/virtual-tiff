@@ -36,7 +36,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-geotiff = ["async-geotiff>=0.4.0"]
+geotiff = ["async-geotiff>=0.5.1"]
 
 # Dependency sets under dependencies-groups are NOT available via PyPI
 [dependency-groups]
@@ -100,7 +100,7 @@ async_tiff = "*"
 
 # Define a feature set with async-geotiff
 [tool.pixi.feature.geotiff.pypi-dependencies]
-async_geotiff = ">=0.4.0"
+virtual_tiff = { path = ".", editable = true, extras = ["geotiff"] }
 
 # Define commands to run within the test environments
 [tool.pixi.feature.test.tasks]
@@ -143,9 +143,6 @@ source = "vcs"
 packages = [
   "src/virtual_tiff",
 ]
-
-[tool.hatch.metadata]
-allow-direct-references = true
 
 [project.entry-points."zarr.codecs"]
 "imagecodecs_deflate" = "virtual_tiff.imagecodecs:DeflateCodec"
