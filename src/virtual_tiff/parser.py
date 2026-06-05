@@ -487,7 +487,7 @@ def _construct_manifest_group(
     """
     # TODO: Make an async approach
     tiff = sync(_open_tiff(store=store, path=path))
-    raw_tiff = tiff.tiff if isinstance(tiff, AsyncGeoTIFF) else tiff
+    raw_tiff = tiff.tiff if (HAS_ASYNC_GEOTIFF and isinstance(tiff, AsyncGeoTIFF)) else tiff
     endian = _ENDIANNESS_TO_STR[raw_tiff.endianness]
 
     # Build manifest arrays from selected IFDs

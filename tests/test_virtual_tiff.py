@@ -126,6 +126,9 @@ def test_geo_key_attributes_are_not_booleans():
     if HAS_ASYNC_GEOTIFF:
         # async-geotiff replaces raw geo keys with crs_wkt/transform
         assert "EPSG" in attrs["crs_wkt"] and "4326" in attrs["crs_wkt"]
+        assert isinstance(attrs["transform"], list)
+        assert len(attrs["transform"]) == 9
+        assert all(isinstance(v, float) for v in attrs["transform"])
     else:
         # geographic_type should be the EPSG code, not True (walrus precedence regression)
         assert attrs["geographic_type"] == 4326
