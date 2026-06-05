@@ -25,6 +25,7 @@ from virtual_tiff.constants import COMPRESSORS, GEO_KEYS, SAMPLE_DTYPES
 from virtual_tiff.imagecodecs import FloatPredCodec, ZstdCodec
 from virtual_tiff.utils import (
     check_no_partial_strips,
+    gdal_metadata_to_dict,
 )
 from virtual_tiff.vendor.xarray.zarr import FillValueCoder
 
@@ -313,14 +314,6 @@ def _get_attributes(
             )
             if ifd.geo_key_directory:
                 attrs = _parse_geo_key_directory(ifd.geo_key_directory)
-        if geotiff._gdal_metadata is not None:
-            attrs["offsets"] = list(geotiff.offsets)
-            attrs["scales"] = list(geotiff.scales)
-            if stats := geotiff.stored_stats:
-                attrs["band_statistics"] = {
-                    k: {f: v for f, v in vars(stat).items() if v is not None}
-                    for k, stat in stats.items()
-                }
     elif ifd.geo_key_directory:
         attrs = _parse_geo_key_directory(ifd.geo_key_directory)
     extra_keys = [
@@ -332,6 +325,9 @@ def _get_attributes(
     for key in extra_keys:
         if value := getattr(ifd, key):
             attrs[key] = value
+    if geotiff is None:
+        if gdal_metadata := ifd.gdal_metadata:
+            attrs = {**attrs, **gdal_metadata_to_dict(gdal_metadata)}
     if fill_value := ifd.gdal_nodata:
         attrs["gdal_no_data"] = fill_value
     return attrs
